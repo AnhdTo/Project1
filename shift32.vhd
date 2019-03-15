@@ -29,7 +29,7 @@ component mux2to1Nbit
 end component;
 
 signal sMuxOut,sOutput,dataInBack,sOutputBack : std_logic_vector(31 downto 0);
-signal s_sel    : std_logic_vector(4 downto 1); -- "10000" when executing lui, sel when executing other shift
+signal s_sel    : std_logic_vector(4 downto 0); -- "10000" when executing lui, sel when executing other shift
 begin
 G1: for i in 0 to N-1 generate
   dataInBack(i) <= dataIn((N-1)-i);
@@ -40,7 +40,7 @@ mux1: mux2to1Nbit port map(dataInBack,dataIn,dir,sMuxOut);
 s_sel <= "10000" when (AorL = '0' and dir = '1') else
 		sel;
 
-shifter: right_shift32 port map(sMuxOut,AorL,sel,sOutput);
+shifter: right_shift32 port map(sMuxOut,AorL,s_sel,sOutput);
 
 G2: for i in 0 to N-1 generate
   sOutputBack(i) <= sOutput((N-1)-i);
