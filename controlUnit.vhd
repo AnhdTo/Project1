@@ -37,12 +37,12 @@ begin
 			    "-010" when ((opcode="000000" and Funct="100100") or opcode="001100") else
 				"0110" when ((opcode="000000" and Funct="000000")) else
 				"-101" when (opcode="000000" and Funct="100111") else
-				"-100" when ((opcode="000000" and Funct="100110") or opcode="01110") else
+				"-100" when ((opcode="000000" and Funct="100110") or opcode="001110") else
 				"-011" when ((opcode="000000" and Funct="100101") or opcode="001101") else
 				"-000" when ((opcode="000000" and (Funct="101010" or Funct="101011")) or opcode="001010" or opcode="001011") else
 				"0111" when (opcode="000000" and Funct="000010") else
 				"1111" when (opcode="000000" and Funct="000011") else
 				"1001" when (opcode="000000" and Funct="100011")else
-				"1110" when (opcode="001111") else
-				"----";
+				"1110" when (opcode="001111");
+				
 end dataflow;
