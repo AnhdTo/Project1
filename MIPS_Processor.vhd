@@ -62,7 +62,9 @@ architecture structure of MIPS_Processor is
   signal s_Z          : std_logic; -- Zero
   signal s_Ovf        : std_logic; -- Overflow
   signal s_ALUOp      : std_logic_vector(3 downto 0);
-  signal s_MemtoReg, s_RegDst, s_ALUSrc     : std_logic; 
+  signal s_MemtoReg, s_RegDst, s_ALUSrc, s_dontcare, s_Jump , s_pcShift2   : std_logic; 
+  signal s_NextAddr     : std_logic_vector(N-1 downto 0);
+  signal  s_PCplusfour     : std_logic_vector(31 downto 0);
   
 	component mem is
 		generic(ADDR_WIDTH : integer;
@@ -74,7 +76,27 @@ architecture structure of MIPS_Processor is
 			we           : in std_logic := '1';
 			q            : out std_logic_vector((DATA_WIDTH -1) downto 0));
     end component;
+    component add_sub is
+	   generic(N : integer := 32);
+  port(A	    : in std_logic_vector(N-1 downto 0);
+       B	    : in std_logic_vector(N-1 downto 0);
+       nAdd_Sub	    : in std_logic;
+       Overflow     : out std_logic;
+       Zero	    : out std_logic;
+       Carry	    : out std_logic;
+       Result	    : out std_logic_vector(N-1 downto 0));
+end component;
 
+    component shift32
+	generic(N : integer := 32);
+	port(dataIn              : in std_logic_vector(N-1 downto 0);
+       AorL                : in std_logic; --0 = Logical, 1 = Arithmetic
+       dir		   : in std_logic; --0 = left, 1 = right
+       sel	           : in std_logic_vector(4 downto 0);
+       output          	   : out std_logic_vector(N-1 downto 0));
+	end component;
+	  
+	  
 	component ALU
 	  port(A	    : in std_logic_vector(31 downto 0);
 		   B	    : in std_logic_vector(31 downto 0);
@@ -84,7 +106,15 @@ architecture structure of MIPS_Processor is
 		   Overflow	    : out std_logic;
 		   Result	    : out std_logic_vector(31 downto 0));
 	end component;
-
+    
+	component mux2to1
+	 port(i_A          : in std_logic;
+       i_B	    : in std_logic;
+       i_X	    : in std_logic;
+       o_Y          : out std_logic);
+	 end component;
+	 
+	 
 	component extender
 	  port(
 		   i_s     : in std_logic; -- always sign extend instead of 0 extend
@@ -100,6 +130,7 @@ architecture structure of MIPS_Processor is
 		   i_RT         : in std_logic_vector(4 downto 0);      -- Read Data select 2
 		   i_WE         : in std_logic_vector(4 downto 0);      -- Write Data select
 		   i_WD         : in std_logic_vector(31 downto 0);     -- Write Data value
+		   o_REG        : out std_logic_vector(31 downto 0); 
 		   o_RS         : out std_logic_vector(31 downto 0);   -- Data value output
 		   o_RT         : out std_logic_vector(31 downto 0));  -- Data value output
 	end component;
@@ -130,9 +161,28 @@ architecture structure of MIPS_Processor is
 		   o_Y          : out std_logic_vector(4 downto 0));
 
 	end component;
+	
+	component controlled_adder_structural
+		port(i_A  : in std_logic_vector(N-1 downto 0);
+		   i_B  : in std_logic_vector(N-1 downto 0);
+		   i_C  : in std_logic;  --nAdd_Sub 0: add, 1: sub
+		   i_D  : in std_logic;  --ALUSrc 0: rt(i_B), 1: imm
+		   i_Im : in std_logic_vector(N-1 downto 0);    --immediate integer
+		   o_C  : out std_logic;
+		   o_F  : out std_logic_vector(N-1 downto 0));
+	   
+	end component;
+	
+	component register_32bit
+  
+	  port(i_CLK    : in std_logic;     -- Clock input
+       i_RST        : in std_logic;     -- Reset input
+       i_WE         : in std_logic;     -- Write enable input
+       i_D          : in std_logic_vector(N-1 downto 0);     -- Data value input
+       o_Q          : out std_logic_vector(N-1 downto 0));   -- Data value output
 
-  -- TODO: You may add any additional signals or components your implementation 
-  --       requires below this comment
+	end component;
+
 
 begin
 
@@ -140,7 +190,6 @@ begin
   with iInstLd select
     s_IMemAddr <= s_NextInstAddr when '0',
       iInstAddr when others;
-
 
   IMem: mem
     generic map(ADDR_WIDTH => 10,
@@ -164,6 +213,38 @@ begin
 
   -- TODO: Implement the rest of your processor below this comment! 
   
+  PC: register_32bit
+	port map(i_CLK => iCLK,
+		   i_RST => iRST,
+		   i_WE => '1',
+		   i_D => s_NextAddr,
+		   o_Q => s_NextInstAddr);
+ pcshift: shift32
+	port(dataIn=>s_SignExtImm,              
+       AorL =>'0',
+       dir	=>'0',	 
+       sel	=>"0010",         
+       output => s_pcShift2);
+	   
+	   
+  PC4: add_sub
+	port map(A=>s_NextInstAddr,
+       B =>"00000000000000000000000000000100",
+       nAdd_Sub=>'0',
+       Overflow=>s_dontcare,
+       Zero=>s_dontcare,	    
+       Carry=>s_dontcare,	   
+       Result=>s_PCplusfour);
+
+  Adder: controlled_adder_structural
+	port map(i_A => s_NextInstAddr,
+       i_B => x"00000000",
+       i_C	=> '0',
+       i_D  => '1',
+       i_Im	 => x"00000004",
+       o_C	=> s_dontcare,
+       o_F	=> s_NextAddr);
+  
   RegDst_select: mux2to1_5bitD
     port map(i_A => s_Inst(20 downto 16),
 		   i_B => s_Inst(15 downto 11),
@@ -178,6 +259,7 @@ begin
 		   i_RT => s_Inst(20 downto 16),
 		   i_WE => s_RegWrAddr,
 		   i_WD => s_RegWrData,
+		   o_REG => v0,
 		   o_RS => s_RegRead,
 		   o_RT => s_DMemData);
 		   
@@ -194,14 +276,20 @@ begin
 		 MemtoReg => s_MemtoReg,
 		 DMemWr	=> s_DMemWr,
 		 RegWr => s_RegWr,
-		 RegDst => s_RegDst);
+		 RegDst => s_RegDst;
+		 jump => s_Jump);
 
   ALUSrc_select: mux2_1_structural
 	port map(i_A => s_SignExtImm,
 		   i_B => s_DMemData,
 		   i_S => s_ALUSrc, --1: A; 0: B
 		   o_F => s_ALUOpr2);
-		   
+  jump_Mux: mux2to1
+	port map(i_A =>s_pcShift2,
+			 i_B =>s_PCplusfour,
+			 i_X=>s_Jump,
+			 o_Y=s_NextInstAddr);
+	
   ALU1: ALU			   
 	port map(A => s_RegRead,
 		   B => s_ALUOpr2,
@@ -210,6 +298,8 @@ begin
 		   Zero	=> s_Z,
 		   Overflow	=> s_Ovf,
 		   Result => s_DMemAddr);
+		   
+	oALUOut <= s_DMemAddr;
 
   MemtoReg_select: mux2_1_structural
 	port map(i_A => s_DMemOut,
