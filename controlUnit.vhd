@@ -1,3 +1,4 @@
+
 library IEEE;
 use IEEE.std_logic_1164.all;
 use IEEE.std_logic_signed.all;
@@ -11,10 +12,22 @@ entity controlUnit is
 		 MemRd			: out std_logic;
 		 DMemWr		    : out std_logic;
 		 RegWr		    : out std_logic;
-		 RegDst			: out std_logic);
+		 RegDst			: out std_logic;
+		 jump  			: out std_logic;
+		 beq			: out std_logic;
+		 jumpR			: out std_logic);
 end controlUnit;
 architecture dataflow of controlUnit is
 begin 
+	with opcode select
+		jump<='1' when "000010", --signal for jump base on opcode
+		'0' when others;
+	with Funct select
+		jumpR<='1' when "000100",		--signal for jr base on function code
+			'0' when others;
+	with opcode select						--signal for beq base on opcode
+		beq<='1' when "000100",
+		'0' when others;
 	with opcode select
 		ALUSrc<='0' when "000000", 
 			'1' when others;
@@ -43,6 +56,6 @@ begin
 				"0111" when (opcode="000000" and Funct="000010") else
 				"1111" when (opcode="000000" and Funct="000011") else
 				"1001" when (opcode="000000" and Funct="100011")else
-				"1110" when (opcode="001111");
-				
+				"1110" when (opcode="001111") else
+				"----";
 end dataflow;
