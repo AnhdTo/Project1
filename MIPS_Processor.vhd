@@ -62,10 +62,13 @@ architecture structure of MIPS_Processor is
   signal s_Z          : std_logic; -- Zero
   signal s_Ovf        : std_logic; -- Overflow
   signal s_ALUOp      : std_logic_vector(3 downto 0);
-  signal s_MemtoReg, s_RegDst, s_ALUSrc, s_dontcare, s_Jump , s_pcShift2   : std_logic; 
-  signal s_NextAddr     : std_logic_vector(N-1 downto 0);
+  signal s_MemtoReg, s_RegDst, s_ALUSrc, s_dontcare     : std_logic; 
+  signal s_NextAddr,s_pcShift2 ,s_PC4_Signed    : std_logic_vector(N-1 downto 0);
   signal  s_PCplusfour     : std_logic_vector(31 downto 0);
-  
+   --
+   signal s_Jump,s_JumpR, s_beq	, s_isJump: std_logic;
+   signal s_SignShift,s_Shifted_Inst,s_isBranch,s_JumpRresult	:std_logic_vector(31 downto 0);
+   
 	component mem is
 		generic(ADDR_WIDTH : integer;
             DATA_WIDTH : integer);
@@ -107,13 +110,6 @@ end component;
 		   Result	    : out std_logic_vector(31 downto 0));
 	end component;
     
-	component mux2to1
-	 port(i_A          : in std_logic;
-       i_B	    : in std_logic;
-       i_X	    : in std_logic;
-       o_Y          : out std_logic);
-	 end component;
-	 
 	 
 	component extender
 	  port(
@@ -151,7 +147,10 @@ end component;
 			 MemRd			: out std_logic;
 			 DMemWr		    : out std_logic;
 			 RegWr		    : out std_logic;
-			 RegDst			: out std_logic);
+			 RegDst			: out std_logic;
+			 jump 			: out std_logic;
+			 beq			: out std_logic;
+			 jumpR			: out std_logic);
 	end component;
 
 	component mux2to1_5bitD
@@ -219,22 +218,58 @@ begin
 		   i_WE => '1',
 		   i_D => s_NextAddr,
 		   o_Q => s_NextInstAddr);
+ 
  pcshift: shift32
-	port(dataIn=>s_SignExtImm,              
+	port map(dataIn => s_SignExtImm,             --shifts signed extended by 2 
        AorL =>'0',
        dir	=>'0',	 
-       sel	=>"0010",         
-       output => s_pcShift2);
-	   
-	   
-  PC4: add_sub
-	port map(A=>s_NextInstAddr,
-       B =>"00000000000000000000000000000100",
-       nAdd_Sub=>'0',
-       Overflow=>s_dontcare,
-       Zero=>s_dontcare,	    
-       Carry=>s_dontcare,	   
-       Result=>s_PCplusfour);
+       sel	=>"00010",         
+       output => s_SignShift);
+ signShift: shift32
+	port map(dataIn => s_Inst(25 downto 0),            --shift lower 26 bit of instruction by 2  
+       AorL =>'0',
+       dir	=>'0',	 
+       sel	=>"00010",         
+       output => s_Shifted_Inst);
+  
+  shiftedSign_plus_PC4:controlled_adder_structural   --Branch address
+   port map(i_A => s_SignShift,
+       i_B => s_NextAddr,
+       i_C	=> '0',
+       i_D  => '1',
+       i_Im	 => x"00000000",
+       o_C	=> s_dontcare,
+       o_F	=> s_PC4_Signed);
+	s_beq<= s_beq or s_Z;   --selector for branch_mux
+
+s_SignShift <= s_NextAddr(31 downto 0) and s_Shifted_Inst(31 downto 0); --jump address
+	 
+	 --jump_Mux: mux2_1_structural
+--	port map(i_A =>s_pcShift2,
+	--		 i_B =>s_NextAddr,
+		--	 i_S=>s_Jump,
+			-- o_F=>s_NextInstAddr);
+branch_mux : mux2_1_structural --decide branch or Pc+4
+port map(i_A =>s_PC4_Signed,
+			 i_B =>s_NextAddr,  --PC+4
+			 i_S=>s_beq,
+			 o_F=>s_isBranch);
+			 
+ 
+ jr_Mux: mux2_1_structural				--jr decide wheter to take rs or signed shifted, (pc takes rs when its jr) 
+ port map(i_A =>s_SignShift,
+			 i_B =>s_RegRead,
+			 i_S=>s_JumpR,
+			 o_F=>s_JumpRresult);
+			 
+
+ Muxjrjbeq:mux2_1_structural     --final mux that decide wheteher to take jr_mux or branch_mux output base on j as a selector
+ port map(i_A =>s_JumpRresult,
+			 i_B =>s_isBranch,
+			 i_S=>s_Jump,
+			 o_F=>s_NextInstAddr);
+ 
+
 
   Adder: controlled_adder_structural
 	port map(i_A => s_NextInstAddr,
@@ -276,19 +311,17 @@ begin
 		 MemtoReg => s_MemtoReg,
 		 DMemWr	=> s_DMemWr,
 		 RegWr => s_RegWr,
-		 RegDst => s_RegDst;
-		 jump => s_Jump);
+		 RegDst => s_RegDst,
+		 jump => s_Jump,
+		 beq => s_beq,
+		 jumpR=>s_JumpR);
 
   ALUSrc_select: mux2_1_structural
 	port map(i_A => s_SignExtImm,
 		   i_B => s_DMemData,
 		   i_S => s_ALUSrc, --1: A; 0: B
 		   o_F => s_ALUOpr2);
-  jump_Mux: mux2to1
-	port map(i_A =>s_pcShift2,
-			 i_B =>s_PCplusfour,
-			 i_X=>s_Jump,
-			 o_Y=s_NextInstAddr);
+  
 	
   ALU1: ALU			   
 	port map(A => s_RegRead,
