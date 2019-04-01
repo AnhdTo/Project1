@@ -240,7 +240,7 @@ begin
        i_Im	 => x"00000000",
        o_C	=> s_dontcare,
        o_F	=> s_PC4_Signed);
-	s_beq<= s_beq or s_Z;   --selector for branch_mux
+	s_beq<= s_beq and s_Z;   --selector for branch_mux
 
 s_SignShift <= s_NextAddr(31 downto 0) and s_Shifted_Inst(31 downto 0); --jump address
 	 
