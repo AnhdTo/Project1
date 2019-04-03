@@ -10,7 +10,7 @@ end or32;
 
 architecture structure of or32 is
 
-component my_or2
+component or2
   port(i_A          : in std_logic;
        i_B          : in std_logic;
        o_F          : out std_logic);
@@ -18,6 +18,6 @@ end component;
 
 begin
 G1: for i in 0 to N-1 generate
-  or_i: my_or2 port map(i_A(i),i_B(i),o_F(i));
+  or_i: or2 port map(i_A(i),i_B(i),o_F(i));
 end generate;
 end structure;

@@ -3,8 +3,8 @@ use IEEE.std_logic_1164.all;
 
 entity mux2to1NbitD is
   generic(N : integer := 32);
-  port(i_A          : in std_logic_vector(N-1 downto 0);
-       i_B	    : in std_logic_vector(N-1 downto 0);
+  port(i_A          : in std_logic_vector(N-1 downto 0); --0
+       i_B	    : in std_logic_vector(N-1 downto 0); --1
        i_X	    : in std_logic;
        o_Y          : out std_logic_vector(N-1 downto 0));
 

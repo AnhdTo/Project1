@@ -53,7 +53,6 @@ architecture structure of MIPS_Processor is
   
   -- intermediate signals
   signal s_RegRead      : std_logic_vector(N-1 downto 0); -- Output of Register file, Read Data 1.
-  signal s_RegRead2     : std_logic_vector(N-1 downto 0); -- Output of Register file, Read Data 2.
   signal s_SignExtImm   : std_logic_vector(N-1 downto 0); -- Output of the extender.
   signal s_ALUOpr2      : std_logic_vector(N-1 downto 0); -- Output of ALUSrc_select; Second operand of ALU.
   
@@ -62,13 +61,12 @@ architecture structure of MIPS_Processor is
   signal s_Z          : std_logic; -- Zero
   signal s_Ovf        : std_logic; -- Overflow
   signal s_ALUOp      : std_logic_vector(3 downto 0);
-  signal s_MemtoReg, s_RegDst, s_ALUSrc, s_dontcare     : std_logic; 
+  signal s_MemtoReg, s_RegDst, s_ALUSrc, s_dontcare, s_SignExt, s_UnsignIns     : std_logic; 
   signal s_NextAddr,s_pcShift2 ,s_PC4_Signed    : std_logic_vector(N-1 downto 0);
-  signal  s_PCplusfour     : std_logic_vector(31 downto 0);
-   --
-   signal s_Jump,s_JumpR, s_beq	, s_isJump: std_logic;
-   signal s_SignShift,s_Shifted_Inst,s_isBranch,s_JumpRresult	:std_logic_vector(31 downto 0);
-   
+  signal  s_PCplusfour, s_jumpBeforeShift, s_JumpAddr     : std_logic_vector(31 downto 0);
+  signal s_Jump, s_JumpR, s_beq, s_branch            : std_logic;
+  signal s_SignShift,s_Shifted_Inst,s_isBranch,s_JumpRresult, s_CurrerntAddr	:std_logic_vector(31 downto 0);
+  
 	component mem is
 		generic(ADDR_WIDTH : integer;
             DATA_WIDTH : integer);
@@ -103,14 +101,15 @@ end component;
 	component ALU
 	  port(A	    : in std_logic_vector(31 downto 0);
 		   B	    : in std_logic_vector(31 downto 0);
+		   shamt    : in std_logic_vector(4 downto 0);
 		   ALUOP	    : in std_logic_vector(3 downto 0);
+		   UnsignedIns    : in std_logic;
 		   Carry	    : out std_logic;
 		   Zero	    : out std_logic;
 		   Overflow	    : out std_logic;
 		   Result	    : out std_logic_vector(31 downto 0));
 	end component;
-    
-	 
+
 	component extender
 	  port(
 		   i_s     : in std_logic; -- always sign extend instead of 0 extend
@@ -150,7 +149,9 @@ end component;
 			 RegDst			: out std_logic;
 			 jump 			: out std_logic;
 			 beq			: out std_logic;
-			 jumpR			: out std_logic);
+			 jumpR			: out std_logic;
+			 SignExt 		: out std_logic;
+			 UnsignIns      : out std_logic);
 	end component;
 
 	component mux2to1_5bitD
@@ -187,7 +188,7 @@ begin
 
   -- TODO: This is required to be your final input to your instruction memory. This provides a feasible method to externally load the memory module which means that the synthesis tool must assume it knows nothing about the values stored in the instruction memory. If this is not included, much, if not all of the design is optimized out because the synthesis tool will believe the memory to be all zeros.
   with iInstLd select
-    s_IMemAddr <= s_NextInstAddr when '0',
+    s_IMemAddr <= s_CurrerntAddr when '0',
       iInstAddr when others;
 
   IMem: mem
@@ -216,8 +217,8 @@ begin
 	port map(i_CLK => iCLK,
 		   i_RST => iRST,
 		   i_WE => '1',
-		   i_D => s_NextAddr,
-		   o_Q => s_NextInstAddr);
+		   i_D => s_NextInstAddr,
+		   o_Q => s_CurrerntAddr);
  
  pcshift: shift32
 	port map(dataIn => s_SignExtImm,             --shifts signed extended by 2 
@@ -225,8 +226,9 @@ begin
        dir	=>'0',	 
        sel	=>"00010",         
        output => s_SignShift);
+ s_jumpBeforeShift <= "000000" & s_Inst(25 downto 0);
  signShift: shift32
-	port map(dataIn => s_Inst(25 downto 0),            --shift lower 26 bit of instruction by 2  
+	port map(dataIn => s_jumpBeforeShift,            --shift lower 26 bit of instruction by 2  
        AorL =>'0',
        dir	=>'0',	 
        sel	=>"00010",         
@@ -236,13 +238,13 @@ begin
    port map(i_A => s_SignShift,
        i_B => s_NextAddr,
        i_C	=> '0',
-       i_D  => '1',
+       i_D  => '0',
        i_Im	 => x"00000000",
        o_C	=> s_dontcare,
        o_F	=> s_PC4_Signed);
-	s_beq<= s_beq and s_Z;   --selector for branch_mux
+	s_branch<= s_beq and s_Z;   --selector for branch_mux
 
-s_SignShift <= s_NextAddr(31 downto 0) and s_Shifted_Inst(31 downto 0); --jump address
+ s_JumpAddr <= s_NextAddr(31 downto 28) & s_Shifted_Inst(27 downto 0); --jump address
 	 
 	 --jump_Mux: mux2_1_structural
 --	port map(i_A =>s_pcShift2,
@@ -252,13 +254,13 @@ s_SignShift <= s_NextAddr(31 downto 0) and s_Shifted_Inst(31 downto 0); --jump a
 branch_mux : mux2_1_structural --decide branch or Pc+4
 port map(i_A =>s_PC4_Signed,
 			 i_B =>s_NextAddr,  --PC+4
-			 i_S=>s_beq,
+			 i_S=>s_branch,
 			 o_F=>s_isBranch);
 			 
  
  jr_Mux: mux2_1_structural				--jr decide wheter to take rs or signed shifted, (pc takes rs when its jr) 
- port map(i_A =>s_SignShift,
-			 i_B =>s_RegRead,
+ port map(i_A =>s_RegRead,
+			 i_B =>s_JumpAddr,
 			 i_S=>s_JumpR,
 			 o_F=>s_JumpRresult);
 			 
@@ -272,7 +274,7 @@ port map(i_A =>s_PC4_Signed,
 
 
   Adder: controlled_adder_structural
-	port map(i_A => s_NextInstAddr,
+	port map(i_A => s_CurrerntAddr,
        i_B => x"00000000",
        i_C	=> '0',
        i_D  => '1',
@@ -299,7 +301,7 @@ port map(i_A =>s_PC4_Signed,
 		   o_RT => s_DMemData);
 		   
   extender_1: extender
-	port map(i_s => '1',
+	port map(i_s => s_SignExt,
 		   i_16 => s_Inst(15 downto 0),
 		   o_32 => s_SignExtImm);
 		   
@@ -314,19 +316,22 @@ port map(i_A =>s_PC4_Signed,
 		 RegDst => s_RegDst,
 		 jump => s_Jump,
 		 beq => s_beq,
-		 jumpR=>s_JumpR);
+		 jumpR=>s_JumpR,
+		 SignExt => s_SignExt,
+		 UnsignIns => s_UnsignIns);
 
   ALUSrc_select: mux2_1_structural
 	port map(i_A => s_SignExtImm,
 		   i_B => s_DMemData,
 		   i_S => s_ALUSrc, --1: A; 0: B
 		   o_F => s_ALUOpr2);
-  
-	
+		   
   ALU1: ALU			   
 	port map(A => s_RegRead,
 		   B => s_ALUOpr2,
+		   shamt => s_Inst(10 downto 6),
 		   ALUOP => s_ALUOp,
+		   UnsignedIns => s_UnsignIns,
 		   Carry => s_C,
 		   Zero	=> s_Z,
 		   Overflow	=> s_Ovf,

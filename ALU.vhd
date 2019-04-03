@@ -5,7 +5,9 @@ entity ALU is
   generic(N : integer := 32);
   port(A	    : in std_logic_vector(N-1 downto 0);
        B	    : in std_logic_vector(N-1 downto 0);
+	   shamt	    : in std_logic_vector(4 downto 0);
        ALUOP	    : in std_logic_vector(3 downto 0);
+	   UnsignedIns  : in std_logic;
        Carry	    : out std_logic;
        Zero	    : out std_logic;
        Overflow	    : out std_logic;
@@ -96,8 +98,9 @@ begin
   or_32: or32 port map(A,B,sOR);
   xor_32: xor32 port map(A,B,sXOR);
   nor_32: nor32 port map(A,B,sNOR);
-  shift: shift32 port map(B,ALUOP(3),ALUOP(0),A(4 downto 0),sShift);
+  shift: shift32 port map(B,ALUOP(3),ALUOP(0),shamt,sShift);
   Slt_1: Slt port map(A, B, sSlt);
-  mux: mux8to1 port map(sPAD,sAddSub,sAND,sOR,sXOR,sNOR,sSlt,sShift,ALUOP(0),ALUOP(1),ALUOP(2),Result);
-  Overflow <=sOverflow;
+  mux: mux8to1 port map(sSlt,sAddSub,sAND,sOR,sXOR,sNOR,sShift,sShift,ALUOP(0),ALUOP(1),ALUOP(2),Result);
+  Overflow <= sOverflow when UnsignedIns='0' else
+	'0';
 end structure;

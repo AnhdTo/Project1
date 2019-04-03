@@ -10,7 +10,7 @@ end xor32;
 
 architecture structure of xor32 is
 
-component my_xor2
+component xor2
   port(i_A          : in std_logic;
        i_B          : in std_logic;
        o_F          : out std_logic);
@@ -18,6 +18,6 @@ end component;
 
 begin
 G1: for i in 0 to N-1 generate
-  xor_i: my_xor2 port map(i_A(i),i_B(i),o_F(i));
+  xor_i: xor2 port map(i_A(i),i_B(i),o_F(i));
 end generate;
 end structure;

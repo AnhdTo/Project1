@@ -5,6 +5,7 @@ entity right_shift32 is
   generic(N : integer := 32);
   port(dataIn              : in std_logic_vector(N-1 downto 0);
        AorL                : in std_logic; --0 = Logical, 1 = Arithmetic
+	   dir                 : in std_logic;
        sel	           : in std_logic_vector(4 downto 0);
        output          	   : out std_logic_vector(N-1 downto 0));
 end right_shift32;
@@ -20,13 +21,16 @@ end component;
 
 signal shiftIn : std_logic := '0';
 signal shift0, shift1, shift2, shift3 : std_logic_vector(31 downto 0);
-
+signal s_AorL : std_logic;
 begin
 
-Arith_or_Logic: process(dataIn,AorL,sel)
+s_AorL <= '0' when (dir = '0' and AorL = '1') else
+		AorL;
+
+Arith_or_Logic: process(dataIn,s_AorL,sel)
 begin
 
-if((AorL = '1') AND (dataIn(31) = '1')) then
+if((s_AorL = '1') AND (dataIn(31) = '1')) then
     shiftIn <= '1';
 else
     shiftIn <= '0';

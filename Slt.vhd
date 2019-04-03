@@ -11,7 +11,7 @@ architecture dataflow of Slt is
 signal s_slt1    : std_logic_vector(31 downto 0) :=x"00000001";
 signal s_slt2    : std_logic_vector(31 downto 0):=x"00000000";
 begin
-Result <= s_slt1 when (A <B) else
+Result <= s_slt1 when (((A < B) and (A(31) = '0') and (B(31) = '0')) or (A(31)= '1' and B(31) = '0') or ((A > B) and (A(31) = '1') and (B(31) = '1'))) else
 		  s_slt2;
   
 end dataflow;
